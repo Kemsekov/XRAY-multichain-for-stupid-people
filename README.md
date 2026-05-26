@@ -1,7 +1,3 @@
-Here's the updated `README.md` with generic **Relay** and **Exit** terminology (no country‑specific names).
-
----
-
 # Multi‑Hop Xray Tunnel: VLESS + REALITY
 
 This repository contains three scripts to deploy a **multi‑hop VLESS + REALITY** tunnel between two servers:
