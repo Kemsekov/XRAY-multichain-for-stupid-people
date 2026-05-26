@@ -196,8 +196,8 @@ restart_xray() {
     echo "$name configured."
 }
 
-restart_xray "$RELAY_IP" "$RELAY_USER" "$RELAY_PASS" "Relay server (RU)"
-restart_xray "$EXIT_IP" "$EXIT_USER" "$EXIT_PASS" "Exit server (PL)"
+restart_xray "$RELAY_IP" "$RELAY_USER" "$RELAY_PASS" "Relay server"
+restart_xray "$EXIT_IP" "$EXIT_USER" "$EXIT_PASS" "Exit server"
 
 # Generate VLESS link for the first user
 VLESS_LINK="vless://${FIRST_USER_UUID}@${RELAY_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.google.com&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#FirstUser"
