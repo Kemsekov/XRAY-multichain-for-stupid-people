@@ -20,6 +20,29 @@ RELAY_IP="$4"
 RELAY_USER="$5"
 RELAY_PASS="$6"
 
+# Check for sni.json file
+if [ ! -f "sni.json" ]; then
+    echo "Error: sni.json file not found in current directory."
+    echo "Please create sni.json containing a JSON array of server names, e.g.:"
+    echo '["www.google.com", "ya.ru", "dzen.ru", "www.microsoft.com"]'
+    exit 1
+fi
+
+
+# Read and validate sni.json
+SNI_ARRAY=$(cat sni.json | tr -d '\n\r')
+if ! echo "$SNI_ARRAY" | jq -e . >/dev/null 2>&1; then
+    echo "Error: sni.json does not contain valid JSON."
+    exit 1
+fi
+
+# Extract first element for dest
+RELAY_DEST=$(echo "$SNI_ARRAY" | jq -r '.[0]')
+if [ -z "$RELAY_DEST" ] || [ "$RELAY_DEST" = "null" ]; then
+    echo "Error: sni.json array is empty."
+    exit 1
+fi
+
 # Check sshpass
 if ! command -v sshpass &> /dev/null; then
     echo "Error: 'sshpass' not installed. Run: sudo apt install sshpass"
@@ -119,8 +142,8 @@ cat > /tmp/relay_config.json <<EOF
         "network": "tcp",
         "security": "reality",
         "realitySettings": {
-          "dest": "www.google.com:443",
-          "serverNames": ["www.google.com","login.microsoftonline.com","api.github.com", "dzen.ru", "ya.ru", "www.microsoft.com","www.cloudflare.com"],
+          "dest": "${RELAY_DEST}:443",
+          "serverNames": $SNI_ARRAY,
           "privateKey": "$RELAY_PRIV",
           "shortIds": ["$RELAY_SHORT"]
         }
@@ -155,7 +178,6 @@ cat > /tmp/relay_config.json <<EOF
     "rules": [{"type": "field", "inboundTag": ["user-inbound"], "outboundTag": "to-pl"}]
   }
 }
-EOF
 
 echo ""
 echo "============================================"

@@ -7,9 +7,9 @@
 
 set -e
 
-if [ $# -ne 4 ]; then
+if [ $# -ne 5 ]; then
     echo "Error: Invalid number of arguments."
-    echo "Usage: $0 <relay_ip> <relay_user> <relay_pass> <user_name>"
+    echo "Usage: $0 <relay_ip> <relay_user> <relay_pass> <user_name> <sni>"
     exit 1
 fi
 
@@ -17,6 +17,38 @@ RELAY_IP="$1"
 RELAY_USER="$2"
 RELAY_PASS="$3"
 USERNAME="$4"
+REQUESTED_SNI="$5"
+
+
+# Check for sni.json file
+if [ ! -f "sni.json" ]; then
+    echo "Error: sni.json not found. Please create it with allowed SNI values."
+    exit 1
+fi
+
+# Read and parse allowed SNIs from sni.json
+ALLOWED_SNIS=$(jq -r '.[]' sni.json)
+FIRST_SNI=$(jq -r '.[0]' sni.json)
+
+if [ -z "$FIRST_SNI" ] || [ "$FIRST_SNI" = "null" ]; then
+    echo "Error: sni.json is empty or invalid."
+    exit 1
+fi
+
+# Determine SNI to use
+if [ -n "$REQUESTED_SNI" ]; then
+    if echo "$ALLOWED_SNIS" | grep -qx "$REQUESTED_SNI"; then
+        USE_SNI="$REQUESTED_SNI"
+        echo "Using requested SNI: $USE_SNI"
+    else
+        echo "Warning: SNI '$REQUESTED_SNI' not in allowed list. Using default: $FIRST_SNI"
+        USE_SNI="$FIRST_SNI"
+    fi
+else
+    USE_SNI="$FIRST_SNI"
+    echo "No SNI specified, using default: $USE_SNI"
+fi
+
 
 if ! command -v sshpass &> /dev/null; then
     echo "Error: 'sshpass' not installed. Run: sudo apt install sshpass"
@@ -43,27 +75,18 @@ ssh_cmd "
 NEW_UUID=$(ssh_cmd "cat /proc/sys/kernel/random/uuid")
 echo "Generated UUID: $NEW_UUID"
 
-# Backup and update config
+# Update config (no backup)
 echo "Updating /usr/local/etc/xray/config.json..."
 ssh_cmd "
     CONFIG=/usr/local/etc/xray/config.json
-    BACKUP=\${CONFIG}.bak.\$(date +%Y%m%d_%H%M%S)
-    cp \$CONFIG \$BACKUP
-    echo \"Backup created: \$BACKUP\"
-
     jq --arg uuid '$NEW_UUID' \
        '.inbounds[0].settings.clients += [{\"id\": \$uuid, \"flow\": \"xtls-rprx-vision\"}]' \
        \$CONFIG > /tmp/config.tmp
     mv /tmp/config.tmp \$CONFIG
-
-    if xray run -test -config \$CONFIG > /dev/null 2>&1; then
-        echo \"Configuration valid.\"
-    else
-        echo \"Configuration invalid. Restoring backup.\"
-        mv \$BACKUP \$CONFIG
-        exit 1
-    fi
 "
+
+# Quick validation (optional, but keeps safety)
+ssh_cmd "xray run -test -config /usr/local/etc/xray/config.json > /dev/null 2>&1 || { echo 'Config invalid'; exit 1; }"
 
 # Restart Xray
 echo "Restarting Xray..."
@@ -86,7 +109,7 @@ if [ -z "$RELAY_PUB" ] || [ -z "$RELAY_SHORT" ]; then
 fi
 
 # Generate VLESS link
-VLESS_LINK="vless://${NEW_UUID}@${RELAY_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.google.com&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#${USERNAME}"
+VLESS_LINK="vless://${NEW_UUID}@${RELAY_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${USE_SNI}&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#${USERNAME}"
 
 echo ""
 echo "============================================"
