@@ -1,0 +1,109 @@
+#!/bin/bash
+
+# ============================================================
+# add_user.sh - Add a new user to the Xray tunnel (relay server)
+# Usage: ./add_user.sh <relay_ip> <relay_user> <relay_pass>
+# ============================================================
+
+set -e
+
+if [ $# -ne 4 ]; then
+    echo "Error: Invalid number of arguments."
+    echo "Usage: $0 <relay_ip> <relay_user> <relay_pass> <user_name>"
+    exit 1
+fi
+
+RELAY_IP="$1"
+RELAY_USER="$2"
+RELAY_PASS="$3"
+USERNAME="$4"
+
+if ! command -v sshpass &> /dev/null; then
+    echo "Error: 'sshpass' not installed. Run: sudo apt install sshpass"
+    exit 1
+fi
+
+ssh_cmd() {
+    sshpass -p "$RELAY_PASS" ssh -o StrictHostKeyChecking=no "$RELAY_USER@$RELAY_IP" "$1"
+}
+
+echo "============================================"
+echo "Adding a new user to relay server ($RELAY_IP)"
+echo "============================================"
+
+# Install jq if missing
+echo "Ensuring jq is installed..."
+ssh_cmd "
+    if ! command -v jq &> /dev/null; then
+        apt-get update -qq && apt-get install -y -qq jq
+    fi
+"
+
+# Generate new UUID
+NEW_UUID=$(ssh_cmd "cat /proc/sys/kernel/random/uuid")
+echo "Generated UUID: $NEW_UUID"
+
+# Backup and update config
+echo "Updating /usr/local/etc/xray/config.json..."
+ssh_cmd "
+    CONFIG=/usr/local/etc/xray/config.json
+    BACKUP=\${CONFIG}.bak.\$(date +%Y%m%d_%H%M%S)
+    cp \$CONFIG \$BACKUP
+    echo \"Backup created: \$BACKUP\"
+
+    jq --arg uuid '$NEW_UUID' \
+       '.inbounds[0].settings.clients += [{\"id\": \$uuid, \"flow\": \"xtls-rprx-vision\"}]' \
+       \$CONFIG > /tmp/config.tmp
+    mv /tmp/config.tmp \$CONFIG
+
+    if xray run -test -config \$CONFIG > /dev/null 2>&1; then
+        echo \"Configuration valid.\"
+    else
+        echo \"Configuration invalid. Restoring backup.\"
+        mv \$BACKUP \$CONFIG
+        exit 1
+    fi
+"
+
+# Restart Xray
+echo "Restarting Xray..."
+ssh_cmd "systemctl restart xray && sleep 2 && systemctl is-active --quiet xray"
+echo "Xray restarted successfully."
+
+# Retrieve public key and short ID
+RELAY_PUB=$(ssh_cmd "
+    PRIV=\$(jq -r '.inbounds[0].streamSettings.realitySettings.privateKey' /usr/local/etc/xray/config.json)
+    echo \"\$PRIV\" | xargs -I {} xray x25519 -i {} | awk '/PublicKey/ {print \$3}'
+")
+
+RELAY_SHORT=$(ssh_cmd "
+    jq -r '.inbounds[0].streamSettings.realitySettings.shortIds[0]' /usr/local/etc/xray/config.json
+")
+
+if [ -z "$RELAY_PUB" ] || [ -z "$RELAY_SHORT" ]; then
+    echo "Error: Could not retrieve public key or short ID."
+    exit 1
+fi
+
+# Generate VLESS link
+VLESS_LINK="vless://${NEW_UUID}@${RELAY_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.google.com&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#${USERNAME}"
+
+echo ""
+echo "============================================"
+echo "✅ New user added successfully!"
+echo "============================================"
+echo "Connection string:"
+echo "$VLESS_LINK"
+echo ""
+echo "Manual parameters:"
+echo "  Address:    $RELAY_IP"
+echo "  Port:       443"
+echo "  Protocol:   VLESS"
+echo "  UUID:       $NEW_UUID"
+echo "  Flow:       xtls-rprx-vision"
+echo "  Security:   reality"
+echo "  SNI:        www.google.com"
+echo "  Fingerprint: chrome"
+echo "  Public Key: $RELAY_PUB"
+echo "  Short ID:   $RELAY_SHORT"
+echo "============================================"
