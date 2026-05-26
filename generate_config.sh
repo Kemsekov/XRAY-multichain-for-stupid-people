@@ -120,7 +120,7 @@ cat > /tmp/relay_config.json <<EOF
         "security": "reality",
         "realitySettings": {
           "dest": "www.google.com:443",
-          "serverNames": ["www.google.com"],
+          "serverNames": ["www.google.com","login.microsoftonline.com","api.github.com", "dzen.ru", "ya.ru", "www.microsoft.com","www.cloudflare.com"],
           "privateKey": "$RELAY_PRIV",
           "shortIds": ["$RELAY_SHORT"]
         }
