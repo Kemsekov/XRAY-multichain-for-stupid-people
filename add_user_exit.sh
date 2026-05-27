@@ -19,19 +19,18 @@ RELAY_PASS="$3"
 USERNAME="$4"
 REQUESTED_SNI="$5"
 
-
-# Check for sni.json file
-if [ ! -f "sni.json" ]; then
-    echo "Error: sni.json not found. Please create it with allowed SNI values."
+# Check for sni_exit.json file
+if [ ! -f "sni_exit.json" ]; then
+    echo "Error: sni_exit.json not found. Please create it with allowed SNI values."
     exit 1
 fi
 
 # Read and parse allowed SNIs from sni.json
-ALLOWED_SNIS=$(jq -r '.[]' sni.json)
-FIRST_SNI=$(jq -r '.[0]' sni.json)
+ALLOWED_SNIS=$(jq -r '.[]' sni_exit.json)
+FIRST_SNI=$(jq -r '.[0]' sni_exit.json)
 
 if [ -z "$FIRST_SNI" ] || [ "$FIRST_SNI" = "null" ]; then
-    echo "Error: sni.json is empty or invalid."
+    echo "Error: sni_exit.json is empty or invalid."
     exit 1
 fi
 

@@ -20,28 +20,44 @@ RELAY_IP="$4"
 RELAY_USER="$5"
 RELAY_PASS="$6"
 
-# Check for sni.json file
-if [ ! -f "sni.json" ]; then
-    echo "Error: sni.json file not found in current directory."
-    echo "Please create sni.json containing a JSON array of server names, e.g.:"
+# Check for sni_relay.json file
+if [ ! -f "sni_relay.json" ]; then
+    echo "Error: sni_relay.json file not found in current directory."
+    echo "Please create sni_relay.json containing a JSON array of server names, e.g.:"
     echo '["www.google.com", "ya.ru", "dzen.ru", "www.microsoft.com"]'
     exit 1
 fi
 
 
-# Read and validate sni.json
-SNI_ARRAY=$(cat sni.json | tr -d '\n\r')
-if ! echo "$SNI_ARRAY" | jq -e . >/dev/null 2>&1; then
-    echo "Error: sni.json does not contain valid JSON."
+# Read and validate sni_relay.json
+SNI_ARRAY_RELAY=$(cat sni_relay.json | tr -d '\n\r')
+if ! echo "$SNI_ARRAY_RELAY" | jq -e . >/dev/null 2>&1; then
+    echo "Error: sni_relay.json does not contain valid JSON."
     exit 1
 fi
 
 # Extract first element for dest
-RELAY_DEST=$(echo "$SNI_ARRAY" | jq -r '.[0]')
+RELAY_DEST=$(echo "$SNI_ARRAY_RELAY" | jq -r '.[0]')
 if [ -z "$RELAY_DEST" ] || [ "$RELAY_DEST" = "null" ]; then
-    echo "Error: sni.json array is empty."
+    echo "Error: sni_relay.json array is empty."
     exit 1
 fi
+
+
+# Read and validate sni_relay.json
+SNI_ARRAY_EXIT=$(cat sni_exit.json | tr -d '\n\r')
+if ! echo "$SNI_ARRAY_EXIT" | jq -e . >/dev/null 2>&1; then
+    echo "Error: sni_exit.json does not contain valid JSON."
+    exit 1
+fi
+
+# Extract first element for dest
+EXIT_DEST=$(echo "$SNI_ARRAY_EXIT" | jq -r '.[0]')
+if [ -z "$EXIT_DEST" ] || [ "$EXIT_DEST" = "null" ]; then
+    echo "Error: sni_exit.json array is empty."
+    exit 1
+fi
+
 
 # Check sshpass
 if ! command -v sshpass &> /dev/null; then
@@ -111,8 +127,8 @@ cat > /tmp/exit_config.json <<EOF
         "network": "tcp",
         "security": "reality",
         "realitySettings": {
-          "dest": "www.microsoft.com:443",
-          "serverNames": ["www.microsoft.com"],
+          "dest": "${EXIT_DEST}:443",
+          "serverNames": $SNI_ARRAY_EXIT,
           "privateKey": "$EXIT_PRIV",
           "shortIds": ["$EXIT_SHORT"]
         }
@@ -143,7 +159,7 @@ cat > /tmp/relay_config.json <<EOF
         "security": "reality",
         "realitySettings": {
           "dest": "${RELAY_DEST}:443",
-          "serverNames": $SNI_ARRAY,
+          "serverNames": $SNI_ARRAY_RELAY,
           "privateKey": "$RELAY_PRIV",
           "shortIds": ["$RELAY_SHORT"]
         }
@@ -165,7 +181,7 @@ cat > /tmp/relay_config.json <<EOF
         "network": "tcp",
         "security": "reality",
         "realitySettings": {
-          "serverName": "www.microsoft.com",
+          "serverName": ${EXIT_DEST},
           "fingerprint": "chrome",
           "shortId": "$EXIT_SHORT",
           "publicKey": "$EXIT_PUB"
