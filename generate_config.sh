@@ -179,15 +179,15 @@ cat > /tmp/relay_config.json <<EOF
         "network": "xhttp",
         "security": "reality",
         "realitySettings": {
-          "dest": "${RELAY_DEST}",
+          "dest": "${RELAY_DEST}:8443",
           "serverNames": $SNI_ARRAY_RELAY,
           "privateKey": "$RELAY_PRIV",
           "shortIds": ["$RELAY_SHORT"]
         },
         "xhttpSettings": {
-          "mode": "packet",       // Режим packet идеально маскирует трафик (эмуляция UDP/QUIC)
+          "mode": "packet-up",
           "extra": {
-            "scVpn": "true"       // Скрытая фича Xray для защиты от DPI-анализа нейросетями РКН
+            "scVpn": "true"
           }
         }
       }
