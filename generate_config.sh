@@ -167,7 +167,7 @@ cat > /tmp/relay_config.json <<EOF
     },
     {
       "listen": "0.0.0.0",
-      "port": 8443,
+      "port": 80,
       "protocol": "vless",
       "tag": "user-inbound-xhttp",
       "settings": {
@@ -179,15 +179,23 @@ cat > /tmp/relay_config.json <<EOF
         "network": "xhttp",
         "security": "reality",
         "realitySettings": {
-          "dest": "${RELAY_DEST}:8443",
+          "dest": "${RELAY_DEST}:443",
           "serverNames": $SNI_ARRAY_RELAY,
           "privateKey": "$RELAY_PRIV",
           "shortIds": ["$RELAY_SHORT"]
         },
         "xhttpSettings": {
-          "mode": "packet-up",
-          "extra": {
-            "scVpn": "true"
+          "mode": "stream-up",
+          "host": "${RELAY_DEST}",
+          "path": "/download/updates",
+          "headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+          },
+          "xPaddingBytes": "100-500",
+          "xmux": {
+            "maxConcurrency": 128,
+            "hMaxRequestTimes": 1000,
+            "hMaxReusableSecs": 3600
           }
         }
       }
@@ -218,7 +226,13 @@ cat > /tmp/relay_config.json <<EOF
     {"protocol": "freedom", "tag": "direct"}
   ],
   "routing": {
-    "rules": [{"type": "field", "inboundTag": ["user-inbound"], "outboundTag": "to-pl"}]
+    "rules": [
+      {
+        "type": "field",
+        "inboundTag": ["user-inbound","user-inbound-xhttp"],
+        "outboundTag": "to-pl"
+      }
+    ]
   }
 }
 
