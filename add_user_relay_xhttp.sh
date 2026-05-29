@@ -111,9 +111,9 @@ fi
 
 # Generate VLESS link (for reference, though unlikely to work in most clients)
 VLESS_LINK="vless://${NEW_UUID}@${RELAY_IP}:8443?encryption=none&security=reality&sni=${USE_SNI}&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#${USERNAME}"
-
+mkdir -p xhttp
 # Generate JSON client configuration file
-JSON_FILE="${USERNAME}_xhttp_config.json"
+JSON_FILE="xhttp/${USERNAME}_xhttp_config.json"
 cat > "$JSON_FILE" <<EOF
 {
   "log": {
