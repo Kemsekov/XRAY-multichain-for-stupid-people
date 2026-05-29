@@ -164,6 +164,33 @@ cat > /tmp/relay_config.json <<EOF
           "shortIds": ["$RELAY_SHORT"]
         }
       }
+    },
+    {
+      "listen": "0.0.0.0",
+      "port": 8443,
+      "protocol": "vless",
+      "tag": "user-inbound-xhttp",
+      "settings": {
+        "clients": [{"id": "$FIRST_USER_UUID", "flow": ""}],
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "xhttp",
+        "security": "reality",
+        "realitySettings": {
+          "dest": "${RELAY_DEST}",
+          "serverNames": $SNI_ARRAY_RELAY,
+          "privateKey": "$RELAY_PRIV",
+          "shortIds": ["$RELAY_SHORT"]
+        },
+        "xhttpSettings": {
+          "mode": "packet",       // Режим packet идеально маскирует трафик (эмуляция UDP/QUIC)
+          "extra": {
+            "scVpn": "true"       // Скрытая фича Xray для защиты от DPI-анализа нейросетями РКН
+          }
+        }
+      }
     }
   ],
   "outbounds": [
@@ -238,14 +265,16 @@ restart_xray "$RELAY_IP" "$RELAY_USER" "$RELAY_PASS" "Relay server"
 restart_xray "$EXIT_IP" "$EXIT_USER" "$EXIT_PASS" "Exit server"
 
 # Generate VLESS link for the first user
-VLESS_LINK="vless://${FIRST_USER_UUID}@${RELAY_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.google.com&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#FirstUser"
+VLESS_LINK1="vless://${FIRST_USER_UUID}@${RELAY_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.google.com&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#FirstUser"
+VLESS_LINK2="vless://${FIRST_USER_UUID}@${RELAY_IP}:8443?encryption=none&flow=&security=reality&sni=www.google.com&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#FirstUser"
 
 echo ""
 echo "============================================"
 echo "✅ Setup complete!"
 echo "============================================"
 echo "First user connection string (copy this):"
-echo "$VLESS_LINK"
+echo "$VLESS_LINK1"
+echo "$VLESS_LINK2"
 echo ""
 echo "Tunnel active: users connecting to $RELAY_IP will exit via $EXIT_IP."
 echo "To add more users, run: ./add_user.sh $RELAY_IP $RELAY_USER <pass>"
