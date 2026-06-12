@@ -117,6 +117,12 @@ fi
 VLESS_LINK_TCP="vless://${NEW_UUID}@${RELAY_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${USE_SNI}&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#${USERNAME}_Relay_TCP"
 VLESS_LINK_GRPC="vless://${NEW_UUID}@${RELAY_IP}:8443?encryption=none&security=reality&sni=${USE_SNI}&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}&type=grpc&serviceName=xray_grpc_service&mode=gun#${USERNAME}_Relay_gRPC"
 
+
+mkdir -p xray_grpc
+VPN_FILE="xray_grpc/${USERNAME}_grpc.vpn"
+echo $VLESS_LINK_GRPC > $VPN_FILE
+
+
 echo ""
 echo "============================================"
 echo "✅ New user added to relay server!"
