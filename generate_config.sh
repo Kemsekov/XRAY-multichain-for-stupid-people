@@ -20,14 +20,13 @@ RELAY_IP="$4"
 RELAY_USER="$5"
 RELAY_PASS="$6"
 
-# Check for sni_relay.json file
-if [ ! -f "sni_relay.json" ]; then
-    echo "Error: sni_relay.json file not found in current directory."
-    echo "Please create sni_relay.json containing a JSON array of server names, e.g.:"
-    echo '["www.google.com", "ya.ru", "dzen.ru", "www.microsoft.com"]'
-    exit 1
-fi
-
+# Check for sni files
+for f in sni_relay.json sni_exit.json; do
+    if [ ! -f "$f" ]; then
+        echo "Error: $f file not found in current directory."
+        exit 1
+    fi
+done
 
 # Read and validate sni_relay.json
 SNI_ARRAY_RELAY=$(cat sni_relay.json | tr -d '\n\r')
@@ -35,29 +34,23 @@ if ! echo "$SNI_ARRAY_RELAY" | jq -e . >/dev/null 2>&1; then
     echo "Error: sni_relay.json does not contain valid JSON."
     exit 1
 fi
-
-# Extract first element for dest
 RELAY_DEST=$(echo "$SNI_ARRAY_RELAY" | jq -r '.[0]')
 if [ -z "$RELAY_DEST" ] || [ "$RELAY_DEST" = "null" ]; then
     echo "Error: sni_relay.json array is empty."
     exit 1
 fi
 
-
-# Read and validate sni_relay.json
+# Read and validate sni_exit.json
 SNI_ARRAY_EXIT=$(cat sni_exit.json | tr -d '\n\r')
 if ! echo "$SNI_ARRAY_EXIT" | jq -e . >/dev/null 2>&1; then
     echo "Error: sni_exit.json does not contain valid JSON."
     exit 1
 fi
-
-# Extract first element for dest
 EXIT_DEST=$(echo "$SNI_ARRAY_EXIT" | jq -r '.[0]')
 if [ -z "$EXIT_DEST" ] || [ "$EXIT_DEST" = "null" ]; then
     echo "Error: sni_exit.json array is empty."
     exit 1
 fi
-
 
 # Check sshpass
 if ! command -v sshpass &> /dev/null; then
@@ -78,10 +71,7 @@ echo "============================================"
 
 EXIT_UUID=$(ssh_cmd "$EXIT_IP" "$EXIT_USER" "$EXIT_PASS" "cat /proc/sys/kernel/random/uuid")
 EXIT_PRIV=$(ssh_cmd "$EXIT_IP" "$EXIT_USER" "$EXIT_PASS" "xray x25519 | awk '/PrivateKey/ {print \$2}'")
-# Derive public key from the private key (no mismatch)
-EXIT_PUB=$(ssh_cmd "$EXIT_IP" "$EXIT_USER" "$EXIT_PASS" "
-    echo '$EXIT_PRIV' | xargs -I {} xray x25519 -i {} | awk '/PublicKey/ {print \$3}'
-")
+EXIT_PUB=$(ssh_cmd "$EXIT_IP" "$EXIT_USER" "$EXIT_PASS" "echo '$EXIT_PRIV' | xargs -I {} xray x25519 -i {} | awk '/PublicKey/ {print \$3}'")
 EXIT_SHORT=$(ssh_cmd "$EXIT_IP" "$EXIT_USER" "$EXIT_PASS" "openssl rand -hex 8")
 
 echo "  Exit UUID: $EXIT_UUID"
@@ -97,11 +87,7 @@ echo "============================================"
 RELAY_PRIV=$(ssh_cmd "$RELAY_IP" "$RELAY_USER" "$RELAY_PASS" "xray x25519 | awk '/PrivateKey/ {print \$2}'")
 RELAY_SHORT=$(ssh_cmd "$RELAY_IP" "$RELAY_USER" "$RELAY_PASS" "openssl rand -hex 8")
 FIRST_USER_UUID=$(ssh_cmd "$RELAY_IP" "$RELAY_USER" "$RELAY_PASS" "cat /proc/sys/kernel/random/uuid")
-
-# Derive relay public key from its private key
-RELAY_PUB=$(ssh_cmd "$RELAY_IP" "$RELAY_USER" "$RELAY_PASS" "
-    echo '$RELAY_PRIV' | xargs -I {} xray x25519 -i {} | awk '/PublicKey/ {print \$3}'
-")
+RELAY_PUB=$(ssh_cmd "$RELAY_IP" "$RELAY_USER" "$RELAY_PASS" "echo '$RELAY_PRIV' | xargs -I {} xray x25519 -i {} | awk '/PublicKey/ {print \$3}'")
 
 echo "  Relay PrivateKey: $RELAY_PRIV"
 echo "  Relay PublicKey (derived): $RELAY_PUB"
@@ -131,6 +117,28 @@ cat > /tmp/exit_config.json <<EOF
           "serverNames": $SNI_ARRAY_EXIT,
           "privateKey": "$EXIT_PRIV",
           "shortIds": ["$EXIT_SHORT"]
+        }
+      }
+    },
+    {
+      "listen": "0.0.0.0",
+      "port": 8443,
+      "protocol": "vless",
+      "settings": {
+        "clients": [{"id": "$EXIT_UUID", "flow": ""}],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "grpc",
+        "security": "reality",
+        "realitySettings": {
+          "dest": "${EXIT_DEST}:443",
+          "serverNames": $SNI_ARRAY_EXIT,
+          "privateKey": "$EXIT_PRIV",
+          "shortIds": ["$EXIT_SHORT"]
+        },
+        "grpcSettings": {
+          "serviceName": "xray_grpc_service"
         }
       }
     }
@@ -167,16 +175,15 @@ cat > /tmp/relay_config.json <<EOF
     },
     {
       "listen": "0.0.0.0",
-      "port": 80,
+      "port": 8443,
       "protocol": "vless",
-      "tag": "user-inbound-xhttp",
+      "tag": "user-inbound-grpc",
       "settings": {
         "clients": [{"id": "$FIRST_USER_UUID", "flow": ""}],
-        ],
         "decryption": "none"
       },
       "streamSettings": {
-        "network": "xhttp",
+        "network": "grpc",
         "security": "reality",
         "realitySettings": {
           "dest": "${RELAY_DEST}:443",
@@ -184,19 +191,8 @@ cat > /tmp/relay_config.json <<EOF
           "privateKey": "$RELAY_PRIV",
           "shortIds": ["$RELAY_SHORT"]
         },
-        "xhttpSettings": {
-          "mode": "stream-up",
-          "host": "${RELAY_DEST}",
-          "path": "/download/updates",
-          "headers": {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-          },
-          "xPaddingBytes": "100-500",
-          "xmux": {
-            "maxConcurrency": 128,
-            "hMaxRequestTimes": 1000,
-            "hMaxReusableSecs": 3600
-          }
+        "grpcSettings": {
+          "serviceName": "xray_grpc_service"
         }
       }
     }
@@ -208,18 +204,21 @@ cat > /tmp/relay_config.json <<EOF
       "settings": {
         "vnext": [{
           "address": "$EXIT_IP",
-          "port": 443,
-          "users": [{"id": "$EXIT_UUID", "flow": "xtls-rprx-vision", "encryption": "none"}]
+          "port": 8443,
+          "users": [{"id": "$EXIT_UUID", "encryption": "none"}]
         }]
       },
       "streamSettings": {
-        "network": "tcp",
+        "network": "grpc",
         "security": "reality",
         "realitySettings": {
-          "serverName": ${EXIT_DEST},
+          "serverName": "${EXIT_DEST}",
           "fingerprint": "chrome",
           "shortId": "$EXIT_SHORT",
           "publicKey": "$EXIT_PUB"
+        },
+        "grpcSettings": {
+          "serviceName": "xray_grpc_service"
         }
       }
     },
@@ -229,19 +228,19 @@ cat > /tmp/relay_config.json <<EOF
     "rules": [
       {
         "type": "field",
-        "inboundTag": ["user-inbound","user-inbound-xhttp"],
+        "inboundTag": ["user-inbound", "user-inbound-grpc"],
         "outboundTag": "to-pl"
       }
     ]
   }
 }
+EOF
 
 echo ""
 echo "============================================"
 echo "Copying configs to servers..."
 echo "============================================"
 
-# Ensure correct directory exists (official Xray path)
 ssh_cmd "$EXIT_IP" "$EXIT_USER" "$EXIT_PASS" "mkdir -p /usr/local/etc/xray"
 ssh_cmd "$RELAY_IP" "$RELAY_USER" "$RELAY_PASS" "mkdir -p /usr/local/etc/xray"
 
@@ -252,12 +251,15 @@ echo "Relay config uploaded to /usr/local/etc/xray/config.json"
 
 rm -f /tmp/exit_config.json /tmp/relay_config.json
 
-# Optional: Open firewall (uncomment if needed)
-# open_firewall() {
-#   ssh_cmd "$1" "$2" "$3" "ufw allow 443/tcp || iptables -A INPUT -p tcp --dport 443 -j ACCEPT"
-# }
-# open_firewall "$EXIT_IP" "$EXIT_USER" "$EXIT_PASS"
-# open_firewall "$RELAY_IP" "$RELAY_USER" "$RELAY_PASS"
+echo ""
+echo "============================================"
+echo "Opening firewall ports (443, 8443)..."
+echo "============================================"
+open_firewall() {
+  ssh_cmd "$1" "$2" "$3" "ufw allow 443/tcp && ufw allow 8443/tcp || { iptables -A INPUT -p tcp --dport 443 -j ACCEPT; iptables -A INPUT -p tcp --dport 8443 -j ACCEPT; }"
+}
+open_firewall "$EXIT_IP" "$EXIT_USER" "$EXIT_PASS"
+open_firewall "$RELAY_IP" "$RELAY_USER" "$RELAY_PASS"
 
 echo ""
 echo "============================================"
@@ -270,7 +272,7 @@ restart_xray() {
     ssh_cmd "$ip" "$user" "$pass" "
         systemctl restart xray
         sleep 2
-        systemctl is-active --quiet xray && echo '✅ Xray active' || { echo '❌ Xray failed'; exit 1; }
+        systemctl is-active --quiet xray && echo '✅ Xray active' || { echo '❌ Xray failed'; journalctl -u xray -n 10 --no-pager; exit 1; }
     " || { echo "Error restarting Xray on $name"; exit 1; }
     echo "$name configured."
 }
@@ -279,15 +281,18 @@ restart_xray "$RELAY_IP" "$RELAY_USER" "$RELAY_PASS" "Relay server"
 restart_xray "$EXIT_IP" "$EXIT_USER" "$EXIT_PASS" "Exit server"
 
 # Generate VLESS link for the first user
-VLESS_LINK1="vless://${FIRST_USER_UUID}@${RELAY_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=www.google.com&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#FirstUser"
-VLESS_LINK2="vless://${FIRST_USER_UUID}@${RELAY_IP}:8443?encryption=none&flow=&security=reality&sni=www.google.com&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#FirstUser"
+VLESS_LINK1="vless://${FIRST_USER_UUID}@${RELAY_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${RELAY_DEST}&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#FirstUser_TCP"
+VLESS_LINK2="vless://${FIRST_USER_UUID}@${RELAY_IP}:8443?encryption=none&security=reality&sni=${RELAY_DEST}&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}&type=grpc&serviceName=xray_grpc_service&mode=gun#FirstUser_gRPC"
 
 echo ""
 echo "============================================"
 echo "✅ Setup complete!"
 echo "============================================"
-echo "First user connection string (copy this):"
+echo "First user connection strings (copy these):"
+echo "1. TCP + REALITY (Fallback):"
 echo "$VLESS_LINK1"
+echo ""
+echo "2. gRPC + REALITY (Primary/Resilient):"
 echo "$VLESS_LINK2"
 echo ""
 echo "Tunnel active: users connecting to $RELAY_IP will exit via $EXIT_IP."
