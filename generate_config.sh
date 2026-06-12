@@ -268,8 +268,8 @@ restart_xray "$RELAY_IP" "$RELAY_USER" "$RELAY_PASS" "Relay server"
 restart_xray "$EXIT_IP" "$EXIT_USER" "$EXIT_PASS" "Exit server"
 
 # Generate VLESS link for the first user
-VLESS_LINK1="vless://${FIRST_USER_UUID}@${RELAY_IP}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${RELAY_DEST}&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#FirstUser_TCP"
-VLESS_LINK2="vless://${FIRST_USER_UUID}@${RELAY_IP}:8443?encryption=none&security=reality&sni=${RELAY_DEST}&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}&type=grpc&serviceName=xray_grpc_service&mode=gun#FirstUser_gRPC"
+VLESS_LINK1="vless://${FIRST_USER_UUID}@${RELAY_DEST}:443?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${RELAY_DEST}&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}#FirstUser_TCP"
+VLESS_LINK2="vless://${FIRST_USER_UUID}@${RELAY_DEST}:8443?encryption=none&security=reality&sni=${RELAY_DEST}&fp=chrome&pbk=${RELAY_PUB}&sid=${RELAY_SHORT}&type=grpc&serviceName=xray_grpc_service&mode=gun#FirstUser_gRPC"
 
 echo ""
 echo "============================================"
