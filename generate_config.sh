@@ -20,28 +20,12 @@ RELAY_IP="$4"
 RELAY_USER="$5"
 RELAY_PASS="$6"
 
-# Check for sni files
-for f in sni_relay.json sni_exit.json; do
-    if [ ! -f "$f" ]; then
-        echo "Error: $f file not found in current directory."
-        exit 1
-    fi
-done
-
-# Read and validate sni_relay.json
-SNI_ARRAY_RELAY=$(cat sni_relay.json | tr -d '\n\r')
-if ! echo "$SNI_ARRAY_RELAY" | jq -e . >/dev/null 2>&1; then
-    echo "Error: sni_relay.json does not contain valid JSON."
-    exit 1
-fi
-
 # Read RELAY_DOMAIN from .env safely
 RELAY_DEST=$(grep '^RELAY_DOMAIN=' .env | cut -d'=' -f2 | tr -d '[:space:]')
 if [ -z "$RELAY_DEST" ]; then
     echo "Error: RELAY_DOMAIN not found or empty in .env file."
     exit 1
 fi
-
 
 # Read and validate sni_exit.json
 SNI_ARRAY_EXIT=$(cat sni_exit.json | tr -d '\n\r')

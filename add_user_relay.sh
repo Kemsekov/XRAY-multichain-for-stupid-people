@@ -1,14 +1,14 @@
 #!/bin/bash
 # ============================================================
 # add_user_relay.sh - Add a new user to the Xray relay server
-# Usage: ./add_user_relay.sh <relay_ip> <relay_user> <relay_pass> <user_name> [sni]
+# Usage: ./add_user_relay.sh <relay_ip> <relay_user> <relay_pass> <user_name>
 # ============================================================
 
 set -e
 
-if [ $# -lt 4 ] || [ $# -gt 5 ]; then
+if [ $# -lt 3 ] || [ $# -gt 4 ]; then
     echo "Error: Invalid number of arguments."
-    echo "Usage: $0 <relay_ip> <relay_user> <relay_pass> <user_name> [sni]"
+    echo "Usage: $0 <relay_ip> <relay_user> <relay_pass> <user_name>"
     exit 1
 fi
 
@@ -16,7 +16,7 @@ RELAY_IP="$1"
 RELAY_USER="$2"
 RELAY_PASS="$3"
 USERNAME="$4"
-REQUESTED_SNI="${5:-}"
+REQUESTED_SNI=""
 
 if ! command -v sshpass &> /dev/null; then
     echo "Error: 'sshpass' not installed. Run: sudo apt install sshpass"
@@ -48,21 +48,7 @@ if [ -z "$SERVER_SNI" ] || [ "$SERVER_SNI" = "null" ]; then
     exit 1
 fi
 
-# Determine SNI to use
-if [ -n "$REQUESTED_SNI" ]; then
-    # Validate if requested SNI is in the server's allowed list
-    ALLOWED_SNIS=$(ssh_cmd "jq -r '.inbounds[0].streamSettings.realitySettings.serverNames[]' /usr/local/etc/xray/config.json")
-    if echo "$ALLOWED_SNIS" | grep -qx "$REQUESTED_SNI"; then
-        USE_SNI="$REQUESTED_SNI"
-        echo "Using requested SNI: $USE_SNI"
-    else
-        echo "Warning: SNI '$REQUESTED_SNI' not in server's allowed list. Using default: $SERVER_SNI"
-        USE_SNI="$SERVER_SNI"
-    fi
-else
-    USE_SNI="$SERVER_SNI"
-    echo "No SNI specified, using server default: $USE_SNI"
-fi
+USE_SNI="$SERVER_SNI"
 
 # Generate new UUID
 NEW_UUID=$(ssh_cmd "cat /proc/sys/kernel/random/uuid")
