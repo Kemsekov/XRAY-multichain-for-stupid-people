@@ -34,11 +34,14 @@ if ! echo "$SNI_ARRAY_RELAY" | jq -e . >/dev/null 2>&1; then
     echo "Error: sni_relay.json does not contain valid JSON."
     exit 1
 fi
-RELAY_DEST=$(echo "$SNI_ARRAY_RELAY" | jq -r '.[0]')
-if [ -z "$RELAY_DEST" ] || [ "$RELAY_DEST" = "null" ]; then
-    echo "Error: sni_relay.json array is empty."
+
+# Read RELAY_DOMAIN from .env safely
+RELAY_DEST=$(grep '^RELAY_DOMAIN=' .env | cut -d'=' -f2 | tr -d '[:space:]')
+if [ -z "$RELAY_DEST" ]; then
+    echo "Error: RELAY_DOMAIN not found or empty in .env file."
     exit 1
 fi
+
 
 # Read and validate sni_exit.json
 SNI_ARRAY_EXIT=$(cat sni_exit.json | tr -d '\n\r')
@@ -166,8 +169,8 @@ cat > /tmp/relay_config.json <<EOF
         "network": "tcp",
         "security": "reality",
         "realitySettings": {
-          "dest": "${RELAY_DEST}:443",
-          "serverNames": $SNI_ARRAY_RELAY,
+          "dest": "$RELAY_DEST:8444",
+          "serverNames": ["$RELAY_DEST"],
           "privateKey": "$RELAY_PRIV",
           "shortIds": ["$RELAY_SHORT"]
         }
@@ -186,8 +189,8 @@ cat > /tmp/relay_config.json <<EOF
         "network": "grpc",
         "security": "reality",
         "realitySettings": {
-          "dest": "${RELAY_DEST}:443",
-          "serverNames": $SNI_ARRAY_RELAY,
+          "dest": "$RELAY_DEST:8444",
+          "serverNames": ["$RELAY_DEST"],
           "privateKey": "$RELAY_PRIV",
           "shortIds": ["$RELAY_SHORT"]
         },

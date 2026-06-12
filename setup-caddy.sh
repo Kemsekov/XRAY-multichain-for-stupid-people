@@ -76,10 +76,10 @@ ssh_cmd "sudo chown -R caddy:caddy /var/www/caddy_site"
 ssh_cmd "sudo chmod -R 755 /var/www/caddy_site"
 
 # 3. Configure Caddyfile
-echo "⚙️ Configuring Caddy to listen on port 8443..."
+echo "⚙️ Configuring Caddy to listen on port 8444..."
 ssh_cmd "
 cat > /tmp/Caddyfile <<EOF
-${RELAY_DOMAIN}:8443 {
+${RELAY_DOMAIN}:8444 {
     root * /var/www/caddy_site
     file_server
 }
@@ -111,12 +111,12 @@ echo "============================================"
 echo "✅ Caddy setup complete!"
 echo "============================================"
 echo "Your fallback website is now live at:"
-echo "👉 https://${RELAY_DOMAIN}:8443"
+echo "👉 https://${RELAY_DOMAIN}:8444"
 echo ""
 echo "⚠️ CRITICAL NEXT STEPS FOR XRAY:"
 echo "1. Update your Xray Relay config (realitySettings):"
-echo "   - Change \"dest\" to: \"127.0.0.1:8443\""
+echo "   - Change \"dest\" to: \"127.0.0.1:8444\""
 echo "   - Add \"${RELAY_DOMAIN}\" to the \"serverNames\" array"
 echo "2. Ensure Xray is NOT listening on port 80 (Caddy needs it for cert renewal)."
-echo "3. Ensure Xray owns port 443, and Caddy owns port 8443."
+echo "3. Ensure Xray owns port 443, and Caddy owns port 8444."
 echo "============================================"
